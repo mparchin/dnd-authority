@@ -5,3 +5,6 @@ Properties/
 .env
 *.sln
 .git
+.private.pem
+.public.pem
+.vscode/
