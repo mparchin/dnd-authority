@@ -1,17 +1,10 @@
 using System.Security.Claims;
-using System.Security.Cryptography;
 using authority;
 using authority.Schema;
 using JWT.Algorithms;
 using JWT.Builder;
-using JWT.Extensions.AspNetCore;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.OpenApi.Models;
 
-var publicKey = RSA.Create();
-publicKey.ImportFromPem(File.ReadAllText(".public.pem").ToCharArray());
-var privateKey = RSA.Create();
-privateKey.ImportFromPem(File.ReadAllText(".private.pem").ToCharArray());
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,27 +35,7 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-builder.Services.AddSingleton<IAlgorithmFactory>(new RSAlgorithmFactory(publicKey));
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtAuthenticationDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtAuthenticationDefaults.AuthenticationScheme;
-}).AddJwt(options =>
-{
-    options.OnSuccessfulTicket = (logger, ticket) =>
-    {
-        var user = ticket.Principal.GetUser();
-        if (user.Issuer != "dnd-authority")
-            return AuthenticateResult.Fail(new Exception("Unknown issuer authority"));
-        if (!user.Audience.Contains("dnd-api"))
-            return AuthenticateResult.Fail(new Exception("App is not in scope of token"));
-        if (user.Expiration <= DateTime.UtcNow)
-            return AuthenticateResult.Fail(new Exception("Token is expired"));
-        if (user.IssuedAt >= DateTime.UtcNow)
-            return AuthenticateResult.Fail(new Exception("Token is tampered with"));
-        return AuthenticateResult.Success(ticket);
-    };
-});
+builder.Services.AddJWTAuthentication();
 
 builder.Services.AddAuthorization(options =>
 {
@@ -85,9 +58,9 @@ app.MapGet("/", () => "Hello World!")
     .WithDescription("Main function")
     .WithOpenApi();
 
-app.MapPost("/Login", (PasswordLogin login) =>
+app.MapPost("/Login", (PasswordLogin login, IPrivateRSAProvider privateProvider, IPublicRSAProvider publicProvider) =>
     "Bearer " + JwtBuilder.Create()
-        .WithAlgorithm(new RS256Algorithm(publicKey, privateKey))
+        .WithAlgorithm(new RS256Algorithm(publicProvider.PublicKey, privateProvider.PrivateKey))
         .AddClaims(new User
         {
             Email = "mmzparchin@gmail.com",
