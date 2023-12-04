@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
+using authority;
 using JWT.Algorithms;
 using JWT.Builder;
 using JWT.Extensions.AspNetCore;
@@ -7,6 +8,8 @@ using Microsoft.OpenApi.Models;
 
 var publicKey = RSA.Create();
 publicKey.ImportFromPem(File.ReadAllText(".public.pem").ToCharArray());
+var privateKey = RSA.Create();
+privateKey.ImportFromPem(File.ReadAllText(".private.pem").ToCharArray());
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,15 +44,7 @@ builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtAuthenticationDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtAuthenticationDefaults.AuthenticationScheme;
-}).AddJwt(options =>
-{
-    // secrets, required only for symmetric algorithms, such as HMACSHA256Algorithm
-    // options.Keys = new[] { "mySecret" };
-    options.PayloadType = typeof(Dictionary<string, object>);
-
-    // optionally; disable throwing an exception if JWT signature is invalid
-    // options.VerifySignature = false;
-});
+}).AddJwt();
 builder.Services.AddSingleton<IAlgorithmFactory>(new RSAlgorithmFactory(publicKey));
 builder.Services.AddAuthorization(options =>
 {
@@ -68,36 +63,31 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/", () => "Hello World!")
-   .WithTags("Main")
-   .WithDescription("Main function")
-   .WithOpenApi();
+    .WithTags("Main")
+    .WithDescription("Main function")
+    .WithOpenApi();
 
 app.MapPost("/Login", (string username, string pass) =>
-{
-    var @private = RSA.Create();
-    @private.ImportFromPem(File.ReadAllText(".private.pem").ToCharArray());
+    "Bearer " + JwtBuilder.Create()
+        .WithAlgorithm(new RS256Algorithm(publicKey, privateKey))
+        .AddClaims(new User
+        {
+            Email = "mmzparchin@gmail.com",
+            Password = "test",
+            Name = "Mohammad Parchin",
+            Role = "Super-Admin",
+            LastLogIn = DateTime.Now.AddDays(-1),
+        }
+        .ToJwtUser("dnd-authority", DateTime.Now.AddDays(1), "dnd-api")
+        .GetClaims())
+        .Encode())
+    .WithTags("Logins")
+    .WithDescription("Login using username and password")
+    .WithOpenApi();
 
-    return JwtBuilder.Create()
-                .WithAlgorithm(new RS256Algorithm(publicKey, @private))
-                .AddClaim("iss", "dnd-authority")
-                .AddClaim("sub", "mmzparchin@gmail.com")
-                .AddClaim("aud", new List<string> { "dnd-api" }.Aggregate("", (current, next) => current == "" ? next : $"{current},{next}"))
-                .AddClaim("exp", DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds())
-                .AddClaim("iat", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
-                .AddClaim("name", "Mohammad Parchin")
-                .AddClaim("email", "mmzparchin@gmail.com")
-                .Encode();
-
-})
-.WithTags("Logins")
-.WithDescription("Login using username and password")
-.WithOpenApi();
-
-app.MapGet("/me", (ClaimsPrincipal user) =>
-{
-    return user.Claims.Select(c => new { c.Type, c.Value, c.ValueType });
-}).RequireAuthorization(options => options.RequireClaim("name", "Mohammad Parchin"))
-.WithOpenApi();
+app.MapGet("/me", (ClaimsPrincipal principal) => principal.GetUser())
+    .RequireAuthorization(options => options.RequireClaim("name", "Mohammad Parchin"))
+    .WithOpenApi();
 
 
 app.Run();
