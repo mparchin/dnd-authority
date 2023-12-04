@@ -55,11 +55,14 @@ namespace authority
             ("role", (user) => user.Role ?? "", (user, value) => user.Role = value),
             ("llat", (user) => user.LastLogIn?.ToEpoch().ToString() ?? "",
                 (user, value) => user.LastLogIn = Convert.ToInt64(value).ToDateTime()),
+            ("upat", (user) => user.UpdatedAt.ToEpoch().ToString(),
+                (user, value) => user.UpdatedAt = Convert.ToInt64(value).ToDateTime()),
         ];
         private static long ToEpoch(this DateTime dateTime) =>
             Convert.ToInt64((dateTime.ToUniversalTime() - new DateTime(1970, 1, 1)).TotalMilliseconds);
 
-        private static DateTime ToDateTime(this long epoch) => DateTimeOffset.FromUnixTimeMilliseconds(epoch).DateTime;
+        public static DateTime ToDateTime(this long epoch) =>
+            DateTimeOffset.FromUnixTimeMilliseconds(epoch).DateTime.ToUniversalTime();
 
         public static JWTUser ToJwtUser(this User user, string issuer, DateTime expiration, params string[] audiance) =>
             new(user)

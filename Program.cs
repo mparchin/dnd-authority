@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using authority;
+using authority.Schema;
 using JWT.Algorithms;
 using JWT.Builder;
 using JWT.Extensions.AspNetCore;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.OpenApi.Models;
 
 var publicKey = RSA.Create();
@@ -40,12 +42,28 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+builder.Services.AddSingleton<IAlgorithmFactory>(new RSAlgorithmFactory(publicKey));
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtAuthenticationDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtAuthenticationDefaults.AuthenticationScheme;
-}).AddJwt();
-builder.Services.AddSingleton<IAlgorithmFactory>(new RSAlgorithmFactory(publicKey));
+}).AddJwt(options =>
+{
+    options.OnSuccessfulTicket = (logger, ticket) =>
+    {
+        var user = ticket.Principal.GetUser();
+        if (user.Issuer != "dnd-authority")
+            return AuthenticateResult.Fail(new Exception("Unknown issuer authority"));
+        if (!user.Audience.Contains("dnd-api"))
+            return AuthenticateResult.Fail(new Exception("App is not in scope of token"));
+        if (user.Expiration <= DateTime.UtcNow)
+            return AuthenticateResult.Fail(new Exception("Token is expired"));
+        if (user.IssuedAt >= DateTime.UtcNow)
+            return AuthenticateResult.Fail(new Exception("Token is tampered with"));
+        return AuthenticateResult.Success(ticket);
+    };
+});
+
 builder.Services.AddAuthorization(options =>
 {
 
@@ -67,7 +85,7 @@ app.MapGet("/", () => "Hello World!")
     .WithDescription("Main function")
     .WithOpenApi();
 
-app.MapPost("/Login", (string username, string pass) =>
+app.MapPost("/Login", (PasswordLogin login) =>
     "Bearer " + JwtBuilder.Create()
         .WithAlgorithm(new RS256Algorithm(publicKey, privateKey))
         .AddClaims(new User
@@ -76,16 +94,16 @@ app.MapPost("/Login", (string username, string pass) =>
             Password = "test",
             Name = "Mohammad Parchin",
             Role = "Super-Admin",
-            LastLogIn = DateTime.Now.AddDays(-1),
+            LastLogIn = DateTime.UtcNow.AddDays(-1),
         }
-        .ToJwtUser("dnd-authority", DateTime.Now.AddDays(1), "dnd-api")
+        .ToJwtUser("dnd-authority", DateTime.UtcNow.AddDays(1), "dnd-api")
         .GetClaims())
         .Encode())
     .WithTags("Logins")
     .WithDescription("Login using username and password")
     .WithOpenApi();
 
-app.MapGet("/me", (ClaimsPrincipal principal) => principal.GetUser())
+app.MapGet("/me", (ClaimsPrincipal principal) => new Profile(principal.GetUser()))
     .RequireAuthorization(options => options.RequireClaim("name", "Mohammad Parchin"))
     .WithOpenApi();
 
