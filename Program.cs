@@ -58,11 +58,7 @@ builder.Services.AddSingleton<IJWTTokenFactory, JWTTokenFactory>();
 
 
 builder.AddJWTAuthentication();
-
-builder.Services.AddAuthorization(options =>
-{
-
-});
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
@@ -89,7 +85,8 @@ app.UseAuthorization();
 
 // app.MapPost("/register",)
 
-app.MapPost("/refresh", Results<UnauthorizedHttpResult, Ok<JWTToken>> (JWTToken token, IJWTTokenFactory tokenFactory, ILogger<Program> logger) =>
+app.MapPost("/refresh", Results<UnauthorizedHttpResult, Ok<JWTToken>>
+    (JWTToken token, IJWTTokenFactory tokenFactory, ILogger<Program> logger) =>
 {
     try
     {
@@ -114,7 +111,7 @@ app.MapPost("/login", Results<UnauthorizedHttpResult, Ok<JWTToken>> (PasswordLog
             Email = "mmzparchin@gmail.com",
             Password = "test",
             Name = "Mohammad Parchin",
-            Role = "Super-Admin",
+            Role = "admin",
             LastLogIn = DateTime.UtcNow,
         }));
     }
@@ -126,7 +123,7 @@ app.MapPost("/login", Results<UnauthorizedHttpResult, Ok<JWTToken>> (PasswordLog
 .WithOpenApi();
 
 app.MapGet("/me", (ClaimsPrincipal principal) => new Profile(principal.GetUser()))
-    .RequireAuthorization(options => options.RequireAuthenticatedUser())
+    .RequireAuthorization(Authorization.User)
     .WithTags("authority")
     .WithDescription("Getting current user's info")
     .WithOpenApi();
