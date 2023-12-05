@@ -7,6 +7,9 @@ namespace authority
 {
     public static class JWTExtension
     {
+        private static string Authority { get; set; } = "dnd-authority";
+        private static string CurrentApp { get; set; } = "dnd-authority";
+
         private static readonly List<(string key, Func<JWTUser, string> get, Action<JWTUser, string> set)> _keys =
         [
             ("iss", (user) => user.Issuer, (user, value) => user.Issuer = value),
@@ -25,7 +28,7 @@ namespace authority
             ("upat", (user) => user.UpdatedAt.ToEpoch().ToString(),
                 (user, value) => user.UpdatedAt = Convert.ToInt64(value).ToDateTime()),
         ];
-        private static long ToEpoch(this DateTime dateTime) =>
+        public static long ToEpoch(this DateTime dateTime) =>
             Convert.ToInt64((dateTime.ToUniversalTime() - new DateTime(1970, 1, 1)).TotalMilliseconds);
 
         public static DateTime ToDateTime(this long epoch) =>
@@ -43,26 +46,46 @@ namespace authority
             _keys.Select(key => KeyValuePair.Create<string, object>(key.key, key.get(user)))
                 .Where((pair) => pair.Value.ToString() != "");
 
-        public static JWTUser GetUser(this ClaimsPrincipal principal)
+        public static JWTUser GetUser(this ClaimsPrincipal principal) =>
+            principal.Claims
+                .ToDictionary(claim => claim.Type, claim => claim.Value)
+                .GetUser();
+
+        public static JWTUser GetUser(this Dictionary<string, string> dic)
         {
             var user = new JWTUser();
-            principal.Claims.ToList().ForEach(claim =>
+            dic.ToList().ForEach(claim =>
             {
-                if (_keys.FirstOrDefault(key => key.key == claim.Type) is { } found)
+                if (_keys.FirstOrDefault(key => key.key == claim.Key) is { } found)
                     found.set(user, claim.Value);
             });
             return user;
         }
 
-        public static void AddJWTAuthentication(this IServiceCollection services)
+        public static void VerifyJWTToken(this JWTUser user)
         {
-            services.AddSingleton<IPublicRSAProvider>(new PublicRSAProvider());
-            services.AddSingleton<IPrivateRSAProvider>(new PrivateRSAProvider());
+            if (user.Issuer != Authority)
+                throw new Exception("Unknown issuer authority");
+            if (!user.Audience.Contains(CurrentApp))
+                throw new Exception("App is not in scope of token");
+            if (user.Expiration <= DateTime.UtcNow)
+                throw new Exception("Token is expired");
+            if (user.IssuedAt >= DateTime.UtcNow)
+                throw new Exception("Token is tampered with");
+        }
 
-            services.AddSingleton<IAlgorithmFactory>(sp =>
-                new RSAlgorithmFactory(sp.GetRequiredService<IPublicRSAProvider>().PublicKey));
+        public static void AddJWTAuthentication(this WebApplicationBuilder builder)
+        {
+            Authority = builder.Configuration.GetValue<string>("Authority") ?? Authority;
+            CurrentApp = builder.Configuration.GetValue<string>("App") ?? CurrentApp;
 
-            services.AddAuthentication(options =>
+            builder.Services.AddSingleton<IPublicRSAProvider>(
+                    new PublicRSAProvider(builder.Configuration.GetValue<string>("Public_Key") ?? ".public.pem"));
+
+            builder.Services.AddSingleton<IAlgorithmFactory>(sp =>
+                new RSAlgorithmFactory(sp.GetRequiredService<IPublicRSAProvider>().Key));
+
+            builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtAuthenticationDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme = JwtAuthenticationDefaults.AuthenticationScheme;
@@ -70,15 +93,14 @@ namespace authority
             {
                 options.OnSuccessfulTicket = (logger, ticket) =>
                 {
-                    var user = ticket.Principal.GetUser();
-                    if (user.Issuer != "dnd-authority")
-                        return AuthenticateResult.Fail(new Exception("Unknown issuer authority"));
-                    if (!user.Audience.Contains("dnd-api"))
-                        return AuthenticateResult.Fail(new Exception("App is not in scope of token"));
-                    if (user.Expiration <= DateTime.UtcNow)
-                        return AuthenticateResult.Fail(new Exception("Token is expired"));
-                    if (user.IssuedAt >= DateTime.UtcNow)
-                        return AuthenticateResult.Fail(new Exception("Token is tampered with"));
+                    try
+                    {
+                        ticket.Principal.GetUser().VerifyJWTToken();
+                    }
+                    catch (Exception ex)
+                    {
+                        return AuthenticateResult.Fail(ex);
+                    }
                     return AuthenticateResult.Success(ticket);
                 };
             });

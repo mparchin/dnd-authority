@@ -2,31 +2,45 @@ using System.Security.Cryptography;
 
 namespace authority
 {
-    public interface IPublicRSAProvider
+    public interface IPublicRSAProvider : IDisposable
     {
-        public RSA PublicKey { get; }
+        public RSA Key { get; }
     }
-    public interface IPrivateRSAProvider
+    public interface IPrivateRSAProvider : IDisposable
     {
-        public RSA PrivateKey { get; }
+        public RSA Key { get; }
     }
 
     public class PublicRSAProvider : IPublicRSAProvider
     {
-        public RSA PublicKey { get; }
-        public PublicRSAProvider()
+        public RSA Key { get; }
+        public PublicRSAProvider(string path)
         {
-            PublicKey = RSA.Create();
-            PublicKey.ImportFromPem(File.ReadAllText(".public.pem").ToCharArray());
+            Key = RSA.Create();
+            if (File.Exists(path))
+                Key.ImportFromPem(File.ReadAllText(path).ToCharArray());
+        }
+
+        public void Dispose()
+        {
+            Key.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
     public class PrivateRSAProvider : IPrivateRSAProvider
     {
-        public RSA PrivateKey { get; }
-        public PrivateRSAProvider() : base()
+        public RSA Key { get; }
+        public PrivateRSAProvider(string path)
         {
-            PrivateKey = RSA.Create();
-            PrivateKey.ImportFromPem(File.ReadAllText(".private.pem").ToCharArray());
+            Key = RSA.Create();
+            if (File.Exists(path))
+                Key.ImportFromPem(File.ReadAllText(path).ToCharArray());
+        }
+
+        public void Dispose()
+        {
+            Key.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }
