@@ -5,7 +5,6 @@ namespace authority
         public Guid Guid { get; set; } = Guid.NewGuid();
         public string Name { get; set; } = "";
         public string Email { get; set; } = "";
-        public string Password { get; set; } = "";
         public string? Role { get; set; }
         public DateTime? LastLogIn { get; set; }
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -14,6 +13,8 @@ namespace authority
     public class DbUser : User
     {
         public int Id { get; set; }
+        public string Salt { get; set; } = "";
+        public string Password { get; set; } = "";
     }
 
     public class JWTUser : User
@@ -29,7 +30,6 @@ namespace authority
             Guid = user.Guid;
             Name = user.Name;
             Email = user.Email;
-            Password = user.Password;
             Role = user.Role;
             LastLogIn = user.LastLogIn;
             UpdatedAt = user.UpdatedAt;

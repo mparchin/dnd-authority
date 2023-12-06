@@ -40,11 +40,11 @@ namespace authority
 
         public JWTToken Refresh(JWTToken token)
         {
-            var user = (JsonConvert.DeserializeObject<Dictionary<string, string>>(JwtBuilder.Create()
+            var user = JWTExtension.GetUser(JsonConvert
+                .DeserializeObject<Dictionary<string, string>>(JwtBuilder.Create()
                     .WithAlgorithm(new RS256Algorithm(_public.Key, _private.Key))
                     .MustVerifySignature()
-                    .Decode(token.RefreshToken))?
-                .GetUser()) ?? throw new Exception("Refresh token is tampered with");
+                    .Decode(token.RefreshToken)) ?? throw new Exception("Refresh token is tampered with"));
             user?.VerifyJWTToken();
             return Sign(user!);
         }

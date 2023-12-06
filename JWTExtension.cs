@@ -47,11 +47,10 @@ namespace authority
                 .Where((pair) => pair.Value.ToString() != "");
 
         public static JWTUser GetUser(this ClaimsPrincipal principal) =>
-            principal.Claims
-                .ToDictionary(claim => claim.Type, claim => claim.Value)
-                .GetUser();
+            GetUser(principal.Claims
+                .ToDictionary(claim => claim.Type, claim => claim.Value));
 
-        public static JWTUser GetUser(this Dictionary<string, string> dic)
+        public static JWTUser GetUser(Dictionary<string, string> dic)
         {
             var user = new JWTUser();
             dic.ToList().ForEach(claim =>

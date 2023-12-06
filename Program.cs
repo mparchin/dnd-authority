@@ -8,6 +8,8 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+Console.WriteLine($"Running app in {builder.Environment.EnvironmentName} mode");
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -55,7 +57,8 @@ builder.Services.AddSingleton<IJWTTokenFactoryOptions>(new JWTTokenFactoryOption
     (builder.Configuration.GetValue<string>("Audiance") ?? "dnd-authority,dnd-api").Split(',')
 ));
 builder.Services.AddSingleton<IJWTTokenFactory, JWTTokenFactory>();
-
+builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+builder.Services.AddScoped<IUserService, UserService>();
 
 builder.AddJWTAuthentication();
 builder.Services.AddAuthorization();
@@ -64,15 +67,19 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    if (scope.ServiceProvider.GetService<Db>() is { } db)
+    if (scope.ServiceProvider.GetService<Db>() is { } db &&
+        scope.ServiceProvider.GetService<IUserService>() is { } userService)
     {
         await db.Database.MigrateAsync();
-        if (builder.Environment.IsDevelopment())
-        {
-            //seed
-        }
+        await userService.SeedAdminsAsync(
+            [.. (builder.Configuration.GetValue<string>("Admin_User_Emails") ?? "a@a.a,b@b.b").Split(',')],
+            [.. (builder.Configuration.GetValue<string>("Admin_User_Names") ?? "aaa,bbb").Split(',')],
+            [.. (builder.Configuration.GetValue<string>("Admin_User_Password") ?? "ab123,ab123").Split(',')]);
     }
 }
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
@@ -80,10 +87,29 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseAuthentication();
-app.UseAuthorization();
+app.MapPost("/register", async Task<Results<BadRequest<string>, Ok<JWTToken>>> (RegisterInfo registerInfo,
+    IJWTTokenFactory tokenFactory, Db db, IUserService userService) =>
+{
+    try
+    {
+        var user = await userService.SignUpAsync(new User
+        {
+            Email = registerInfo.Email,
+            Name = registerInfo.Name
+        }, registerInfo.Password);
 
-// app.MapPost("/register",)
+        user.LastLogIn = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        return TypedResults.Ok(tokenFactory.Sign(user));
+    }
+    catch { }
+    return TypedResults.BadRequest(registerInfo.Email);
+})
+.AllowAnonymous()
+.WithTags("authority")
+.WithDescription("Create new user for application")
+.WithOpenApi();
 
 app.MapPost("/refresh", Results<UnauthorizedHttpResult, Ok<JWTToken>>
     (JWTToken token, IJWTTokenFactory tokenFactory, ILogger<Program> logger) =>
@@ -98,35 +124,32 @@ app.MapPost("/refresh", Results<UnauthorizedHttpResult, Ok<JWTToken>>
     }
     return TypedResults.Unauthorized();
 })
+.AllowAnonymous()
 .WithTags("authority")
 .WithDescription("Refreshing provided token")
 .WithOpenApi();
 
-app.MapPost("/login", Results<UnauthorizedHttpResult, Ok<JWTToken>> (PasswordLogin login, IJWTTokenFactory tokenFactory) =>
+app.MapPost("/login", async Task<Results<UnauthorizedHttpResult, Ok<JWTToken>>> (PasswordLogin login,
+    IJWTTokenFactory tokenFactory, IUserService userService) =>
 {
     try
     {
-        return TypedResults.Ok(tokenFactory.Sign(new User
-        {
-            Email = "mmzparchin@gmail.com",
-            Password = "test",
-            Name = "Mohammad Parchin",
-            Role = "admin",
-            LastLogIn = DateTime.UtcNow,
-        }));
+        return TypedResults.Ok(tokenFactory.Sign(await userService
+            .SignInAsync(login.Email, login.Password)));
     }
     catch { }
     return TypedResults.Unauthorized();
 })
+.AllowAnonymous()
 .WithTags("authority")
-.WithDescription("Login using username and password")
+.WithDescription("Login using email and password")
 .WithOpenApi();
 
 app.MapGet("/me", (ClaimsPrincipal principal) => new Profile(principal.GetUser()))
-    .RequireAuthorization(Authorization.User)
-    .WithTags("authority")
-    .WithDescription("Getting current user's info")
-    .WithOpenApi();
+.RequireAuthorization(Authorization.User)
+.WithTags("authority")
+.WithDescription("Getting current user's info")
+.WithOpenApi();
 
 
 app.Run();

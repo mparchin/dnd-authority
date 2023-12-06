@@ -16,7 +16,7 @@ namespace authority.Schema
         public string Password { get; set; } = "";
     }
 
-    public class Register
+    public class RegisterInfo
     {
         public string Name { get; set; } = "";
         public string Email { get; set; } = "";
