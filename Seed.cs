@@ -7,8 +7,7 @@ namespace authority
         {
             var admins = emails.Select(email => (email,
                 name: names[emails.IndexOf(email)],
-                pass: passwords[emails.IndexOf(email)]))
-                .ToList();
+                pass: passwords[emails.IndexOf(email)]));
 
             foreach (var (email, name, pass) in admins)
             {
