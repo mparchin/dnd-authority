@@ -63,6 +63,8 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.AddJWTAuthentication();
 builder.Services.AddAuthorization();
 
+builder.Services.AddCors();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
