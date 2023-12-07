@@ -78,6 +78,13 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+app.UseCors(builder =>
+{
+    builder.AllowAnyHeader();
+    builder.AllowAnyMethod();
+    builder.AllowAnyOrigin();
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 
