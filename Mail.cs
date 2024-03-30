@@ -38,7 +38,7 @@ namespace authority
 
             message.From.Add(new MailboxAddress(_fromName, _fromEmail));
             message.To.Add(new MailboxAddress($"Dear {user.Name}", user.Email));
-            message.Subject = "Reset Eldoria Password";
+            message.Subject = "Reset Password";
             message.Body = new BodyBuilder
             {
                 TextBody = (await File.ReadAllTextAsync(_textFileAddress)).Replace("{{LINK}}", link).Replace("{{NAME}}", user.Name),
