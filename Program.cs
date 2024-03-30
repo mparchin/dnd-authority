@@ -173,7 +173,7 @@ app.MapPost("/login", async Task<Results<UnauthorizedHttpResult, Ok<JWTToken>>> 
 .WithOpenApi();
 
 app.MapPost("/resetPassword", async Task<Results<NotFound<string>, UnauthorizedHttpResult, Ok>>
-(ResetPassword reset, IUserService userService) =>
+(ResetPassword reset, IUserService userService, IMail mail) =>
 {
     try
     {
@@ -181,10 +181,7 @@ app.MapPost("/resetPassword", async Task<Results<NotFound<string>, UnauthorizedH
         if (string.IsNullOrEmpty(reset.Password) || string.IsNullOrEmpty(reset.ResetToken))
         {
             await userService.GenerateResetPasswordToken(user);
-            //send Email
-
-
-
+            await mail.SendResetAsync(user);
             return TypedResults.Ok();
         }
 
