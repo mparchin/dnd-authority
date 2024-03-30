@@ -15,4 +15,5 @@ RUN dotnet publish "authority.csproj" -c Release -o /app/publish /p:UseAppHost=f
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+COPY --from=publish /app/html /app/html
 ENTRYPOINT ["dotnet", "authority.dll"]

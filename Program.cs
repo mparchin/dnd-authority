@@ -9,6 +9,10 @@ using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 Console.WriteLine($"Running app in {builder.Environment.EnvironmentName} mode");
+var swaggerisAvailable = builder.Configuration.GetValue<bool>("Swagger_Enabled");
+
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -57,8 +61,22 @@ builder.Services.AddSingleton<IJWTTokenFactoryOptions>(new JWTTokenFactoryOption
     (builder.Configuration.GetValue<string>("Audiance") ?? "dnd-authority,dnd-api").Split(',')
 ));
 builder.Services.AddSingleton<IJWTTokenFactory, JWTTokenFactory>();
-builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+builder.Services.AddScoped<IPasswordHasher>((service) =>
+    new PasswordHasher(builder.Configuration.GetValue<int>("Reset_Token_Expiration_Hours")));
 builder.Services.AddScoped<IUserService, UserService>();
+
+builder.Services.AddScoped<IMail>((service) => new Mail(
+    builder.Configuration.GetValue<string>("SMTP_Host") ?? "",
+    builder.Configuration.GetValue<int>("SMTP_Port"),
+    builder.Configuration.GetValue<bool>("SMTP_SSL"),
+    builder.Configuration.GetValue<string>("SMTP_Username") ?? "",
+    builder.Configuration.GetValue<string>("SMTP_Password") ?? "",
+    builder.Configuration.GetValue<string>("Email_From") ?? "",
+    builder.Configuration.GetValue<string>("Email_From_Name") ?? "",
+    builder.Configuration.GetValue<string>("Reset_Email_Text_Address") ?? "",
+    builder.Configuration.GetValue<string>("Reset_Email_Html_Address") ?? "",
+    builder.Configuration.GetValue<string>("Reset_Email_Link") ?? "",
+    service.GetService<ILogger>()!));
 
 builder.AddJWTAuthentication();
 builder.Services.AddAuthorization();
@@ -90,7 +108,7 @@ app.UseCors(builder =>
 app.UseAuthentication();
 app.UseAuthorization();
 
-if (app.Environment.IsDevelopment())
+if (swaggerisAvailable)
 {
     app.UseSwagger();
     app.UseSwaggerUI();
@@ -152,6 +170,55 @@ app.MapPost("/login", async Task<Results<UnauthorizedHttpResult, Ok<JWTToken>>> 
 .AllowAnonymous()
 .WithTags("authority")
 .WithDescription("Login using email and password")
+.WithOpenApi();
+
+app.MapPost("/resetPassword", async Task<Results<NotFound<string>, UnauthorizedHttpResult, Ok>>
+(ResetPassword reset, IUserService userService) =>
+{
+    try
+    {
+        var user = await userService.GetAsync(reset.Email);
+        if (string.IsNullOrEmpty(reset.Password) || string.IsNullOrEmpty(reset.ResetToken))
+        {
+            await userService.GenerateResetPasswordToken(user);
+            //send Email
+
+
+
+            return TypedResults.Ok();
+        }
+
+        if (user.ResetToken == reset.ResetToken && DateTime.UtcNow < user.ResetExpirationTime)
+        {
+            await userService.ChangePasswordAsync(user, reset.Password);
+            return TypedResults.Ok();
+        }
+
+        return TypedResults.Unauthorized();
+    }
+    catch { }
+    return TypedResults.NotFound(reset.Email);
+})
+.AllowAnonymous()
+.WithTags("authority")
+.WithDescription("Reset password / send reset password mail")
+.WithOpenApi();
+
+app.MapPost("/changePassword", async Task<Results<Ok, UnauthorizedHttpResult>>
+(ChangePassword change, ClaimsPrincipal principal, IUserService userService) =>
+{
+    try
+    {
+        var user = await userService.SignInAsync(principal.GetUser().Email, change.Password);
+        await userService.ChangePasswordAsync(user, change.NewPassword);
+        return TypedResults.Ok();
+    }
+    catch { }
+    return TypedResults.Unauthorized();
+})
+.RequireAuthorization(Authorization.User)
+.WithTags("authority")
+.WithDescription("Change password")
 .WithOpenApi();
 
 app.MapGet("/me", (ClaimsPrincipal principal) => new Profile(principal.GetUser()))

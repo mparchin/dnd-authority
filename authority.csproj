@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="jwt" Version="10.1.1" />
     <PackageReference Include="JWT.Extensions.AspNetCore" Version="10.1.1" />
+    <PackageReference Include="mailkit" Version="4.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0">
