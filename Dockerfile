@@ -16,4 +16,5 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 COPY html /app/html
+VOLUME /app/html
 ENTRYPOINT ["dotnet", "authority.dll"]
