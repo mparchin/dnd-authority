@@ -10,6 +10,7 @@ namespace authority
         public Task<DbUser> ChangePasswordAsync(string email, string currentPassword, string newPassword);
         public Task<bool> ExistsAsync(string email);
         public Task<DbUser> GetAsync(string email);
+        public Task<DbUser> GenerateResetPasswordToken(DbUser user);
     }
 
     public class UserService(Db db, IPasswordHasher passwordHasher) : IUserService
@@ -30,6 +31,14 @@ namespace authority
 
         public async Task<bool> ExistsAsync(string email) =>
             await _db.Users.AnyAsync(user => user.Email == email);
+
+        public async Task<DbUser> GenerateResetPasswordToken(DbUser user)
+        {
+            _passwordHasher.GeneratePasswordResetToken(user);
+            user.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return user;
+        }
 
         public async Task<DbUser> GetAsync(string email) =>
             await _db.Users.FirstAsync(user => user.Email == email);
