@@ -38,11 +38,11 @@ namespace authority
 
             message.From.Add(new MailboxAddress(_fromName, _fromEmail));
             message.To.Add(new MailboxAddress($"Dear {user.Name}", user.Email));
-
+            message.Subject = "Reset Password";
             message.Body = new BodyBuilder
             {
-                TextBody = (await File.ReadAllTextAsync(_textFileAddress)).Replace("{LINK}", link),
-                HtmlBody = (await File.ReadAllTextAsync(_htmlFileAddress)).Replace("{LINK}", link)
+                TextBody = (await File.ReadAllTextAsync(_textFileAddress)).Replace("{{LINK}}", link).Replace("{{NAME}}", user.Name),
+                HtmlBody = (await File.ReadAllTextAsync(_htmlFileAddress)).Replace("{{LINK}}", link).Replace("{{NAME}}", user.Name)
             }.ToMessageBody();
 
             try

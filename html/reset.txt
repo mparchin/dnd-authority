@@ -1,6 +1,8 @@
+Eldoria - Password Recovery
+We received a request to recover the password for dear {{NAME}}
 If you've lost your password or wish to reset it, use the link bellow to get started.
 
-{LINK}
+{{LINK}}
 
 If you did not request a password reset, you can safely ignore this email.
 Only a person with access to your email can reset your account password.
